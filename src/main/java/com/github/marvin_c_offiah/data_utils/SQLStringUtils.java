@@ -1,12 +1,24 @@
 package com.github.marvin_c_offiah.data_utils;
 
+import java.util.ArrayList;
 import java.util.TreeMap;
 
 public class SQLStringUtils {
 
     public static String[] toWildcardListStrings(TreeMap<String, Object> values) {
-	return new String[] { toWildcardListString(new String[values.keySet().size()]),
-		toWildcardListString(new Object[values.values().size()]) };
+	if (values == null) {
+	    return new String[] { "", "" };
+	}
+	ArrayList<String> keys = new ArrayList<String>();
+	ArrayList<Object> vals = new ArrayList<Object>();
+	for (String key : values.keySet()) {
+	    if (key != null) {
+		keys.add(key);
+		vals.add(values.get(key));
+	    }
+	}
+	return new String[] { toListString(keys.toArray(new String[keys.size()])),
+		toWildcardListString(vals.toArray()) };
     }
 
     public static String toWildcardListString(Object[] values) {
@@ -26,16 +38,16 @@ public class SQLStringUtils {
 	return str;
     }
 
-    public static String toListString(Object[] values) {
+    public static String toListString(Object[] keys) {
 	String str = "";
-	if (values != null) {
-	    for (int i = 0; i < values.length - 1; i++) {
-		if (values[i] != null) {
-		    str += values[i] + ",";
+	if (keys != null) {
+	    for (int i = 0; i < keys.length - 1; i++) {
+		if (keys[i] != null) {
+		    str += keys[i] + ",";
 		}
 	    }
-	    if (values[values.length - 1] != null) {
-		str += values[values.length - 1] + "?";
+	    if (keys[keys.length - 1] != null) {
+		str += keys[keys.length - 1] + "?";
 	    } else {
 		str = str.length() == 0 ? "" : str.substring(0, str.length() - 1);
 	    }
@@ -48,6 +60,10 @@ public class SQLStringUtils {
     };
 
     public static String toWildcardAssignmentsString(TreeMap<String, Object> values, AssignmentDelimiter delimiter) {
+	String result = "";
+	if (values == null) {
+	    return result;
+	}
 	String delim = "";
 	switch (delimiter) {
 	case COMMA:
@@ -59,12 +75,17 @@ public class SQLStringUtils {
 	default:
 	    delim = ",";
 	}
-	String[] keysArray = new String[values.keySet().size()];
-	String result = "";
+	String[] keysArray = values.keySet().toArray(new String[values.size()]);
 	for (int i = 0; i <= keysArray.length; i++) {
-	    result += "? = ? " + delim;
+	    if (keysArray[i] != null) {
+		result += keysArray[i] + " = ? " + delim;
+	    }
 	}
-	result += "? = ? ";
+	if (keysArray[keysArray.length - 1] != null) {
+	    result += keysArray[keysArray.length - 1] + " = ? ";
+	} else {
+	    result = result.substring(0, result.lastIndexOf(result));
+	}
 	return result;
     }
 

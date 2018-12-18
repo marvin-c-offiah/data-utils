@@ -9,6 +9,7 @@ import java.sql.Blob;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Observable;
 import java.util.TreeMap;
@@ -16,6 +17,8 @@ import java.util.TreeMap;
 import org.sqlite.SQLiteConnection;
 import org.sqlite.core.Codes;
 import org.sqlite.jdbc4.JDBC4PreparedStatement;
+
+import com.github.marvin_c_offiah.data_utils.SQLStringUtils.AssignmentDelimiter;
 
 public class SQLiteIO extends Observable {
 
@@ -105,91 +108,60 @@ public class SQLiteIO extends Observable {
     }
 
     public void insertIntoTable(String name, TreeMap<String, Object> values) throws Exception {
-
 	checkTableName(name);
 	if (values != null) {
 	    checkColumnNames(name, values.keySet().toArray(new String[values.size()]));
 	}
-
-	Object[] valsStrings = null;
-	TreeMap<String, Object> wildcards = null;
-	Object[] wildcardStrgs = null;
-	if (!(values == null || values.isEmpty())) {
-	    valsStrings = toWildcardListStrings(values);
-	    wildcards = new TreeMap<String, Object>();
-	    for (int i = 0; i < values.size(); i++) {
-		wildcards.put("" + i, "?");
-	    }
-	    wildcardStrgs = toListStrings(wildcards);
+	String[] valsLists = toWildcardListStrings(values);
+	String colsList = valsLists[0];
+	String valsList = valsLists[1];
+	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection, "INSERT INTO " + name
+		+ (colsList.equals("") ? " DEFAULT VALUES" : ("(" + colsList + ") VALUES(" + valsList + ")")));
+	ArrayList<SimpleEntry<String, Object>> pairs = new ArrayList<SimpleEntry<String, Object>>();
+	for (String key : values.keySet()) {
+	    pairs.add(new SimpleEntry<String, Object>(key, values.get(key)));
 	}
-
-	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
-		"INSERT INTO ?" + (valsStrings == null ? " DEFAULT VALUES"
-			: ("(" + wildcardStrgs[0] + ") VALUES(" + wildcardStrgs[1] + ")")));
-
-	if (valsStrings != null) {
-
-	    JDBC4PreparedStatement metaStmnt = new JDBC4PreparedStatement(connection, "SELECT * FROM ? WHERE 1 = 0");
-	    metaStmnt.setString(0, name);
-	    ResultSetMetaData metadata = metaStmnt.executeQuery().getMetaData();
-	    TreeMap<String, Integer> columnTypes = new TreeMap<String, Integer>();
-	    for (int i = 0; i < metadata.getColumnCount(); i++) {
-		columnTypes.put(metadata.getColumnName(i + 1), metadata.getColumnType(i + 1));
-	    }
-
-	    statement.setString(0, name);
-	    String[] columnNames = values.keySet().toArray(new String[0]);
-	    for (int i = 1; i <= columnNames.length; i++) {
-		statement.setString(i, columnNames[i]);
-	    }
-	    for (int i = columnNames.length + 1; i <= columnNames.length * 2; i++) {
-		Object value = values.get(columnNames[i]);
-		switch (columnTypes.get(columnNames[i])) {
-		case Codes.SQLITE_INTEGER:
-		    statement.setInt(i, (Integer) value);
-		    break;
-		case Codes.SQLITE_FLOAT:
-		    statement.setFloat(i, (Float) value);
-		    break;
-		case Codes.SQLITE_TEXT:
-		    statement.setString(i, (String) value);
-		    break;
-		case Codes.SQLITE_BLOB:
-		    statement.setBlob(i, (Blob) value);
-		}
-	    }
-	}
-
-	statement.execute();
-	statement.close();
-
-	setChanged();
-
+	executePreparedStatement(statement, pairs);
     }
 
     public void updateInTable(String name, TreeMap<String, Object> primaryKey, TreeMap<String, Object> line)
 	    throws Exception {
-	connection.createStatement().executeQuery("UPDATE ? SET " + toWildcardAssignmentsString(line, COMMA) + " WHERE "
-		+ toWildcardAssignmentsString(primaryKey));
-	Object[] valsStrings = null;
-	TreeMap<String, Object> wildcards = null;
-	Object[] wildcardStrgs = null;
-	if (!(values == null || values.isEmpty())) {
-	    valsStrings = toListStrings(values);
-	    wildcards = new TreeMap<String, Object>();
-	    for (int i = 0; i < values.size(); i++) {
-		wildcards.put("" + i, "?");
-	    }
-	    wildcardStrgs = toListStrings(wildcards);
+	checkTableName(name);
+	if (primaryKey != null) {
+	    checkColumnNames(name, primaryKey.keySet().toArray(new String[primaryKey.size()]));
 	}
+	if (line == null || toListString(line.keySet().toArray(new String[line.size()])) == "") {
+	    throw new IllegalArgumentException("The values to set must be provided for table \"" + name + "\".");
+	}
+	checkColumnNames(name, line.keySet().toArray(new String[line.size()]));
+	String pkString = toWildcardAssignmentsString(primaryKey, AssignmentDelimiter.AND);
 	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
-		"UPDATE " + name + " SET " + wildcardStrgs + ")");
-	setChanged();
+		"UPDATE " + name + " SET " + toWildcardAssignmentsString(line, AssignmentDelimiter.COMMA)
+			+ (pkString.equals("") ? "" : (" WHERE " + pkString)));
+
+	ArrayList<SimpleEntry<String, Object>> pairs = new ArrayList<SimpleEntry<String, Object>>();
+	for (String key : line.keySet()) {
+	    pairs.add(new SimpleEntry<String, Object>(key, line.get(key)));
+	}
+	for (String key : primaryKey.keySet()) {
+	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	}
+	executePreparedStatement(statement, pairs);
     }
 
     public void deleteFromTable(String name, TreeMap<String, Object> primaryKey) throws Exception {
-	connection.createStatement().executeQuery("DELETE FROM " + name + " WHERE " + toAssignmentsString(primaryKey));
-	setChanged();
+	checkTableName(name);
+	if (primaryKey != null) {
+	    checkColumnNames(name, primaryKey.keySet().toArray(new String[primaryKey.size()]));
+	}
+	String pkString = toWildcardAssignmentsString(primaryKey, AssignmentDelimiter.AND);
+	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
+		"DELETE FROM" + name + (pkString.equals("") ? "" : (" WHERE " + pkString)));
+	ArrayList<SimpleEntry<String, Object>> pairs = new ArrayList<SimpleEntry<String, Object>>();
+	for (String key : primaryKey.keySet()) {
+	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	}
+	executePreparedStatement(statement, pairs);
     }
 
     protected void checkTableName(String name) throws Exception {
@@ -221,6 +193,42 @@ public class SQLiteIO extends Observable {
 		}
 	    }
 	}
+    }
+
+    protected void executePreparedStatement(JDBC4PreparedStatement statement,
+	    ArrayList<SimpleEntry<String, Object>> values) throws Exception {
+	String[] columnNames = new String[values.size()];
+	for (int i = 0; i < values.size(); i++) {
+	    columnNames[i] = values.get(i).getKey();
+	}
+	String columnsList = toListString(columnNames);
+	if (!columnsList.equals("")) {
+	    ResultSetMetaData metadata = connection.createStatement()
+		    .executeQuery("SELECT " + columnsList + " FROM ? WHERE 1 = 0").getMetaData();
+	    TreeMap<String, Integer> columnTypes = new TreeMap<String, Integer>();
+	    for (int i = 1; i <= metadata.getColumnCount(); i++) {
+		columnTypes.put(metadata.getColumnName(i), metadata.getColumnType(i));
+	    }
+	    for (int i = 1; i <= metadata.getColumnCount(); i++) {
+		Object value = values.get(i);
+		switch (columnTypes.get(metadata.getColumnName(i))) {
+		case Codes.SQLITE_INTEGER:
+		    statement.setInt(i, (Integer) value);
+		    break;
+		case Codes.SQLITE_FLOAT:
+		    statement.setFloat(i, (Float) value);
+		    break;
+		case Codes.SQLITE_TEXT:
+		    statement.setString(i, (String) value);
+		    break;
+		case Codes.SQLITE_BLOB:
+		    statement.setBlob(i, (Blob) value);
+		}
+	    }
+	}
+	statement.execute();
+	statement.close();
+	setChanged();
     }
 
 }
