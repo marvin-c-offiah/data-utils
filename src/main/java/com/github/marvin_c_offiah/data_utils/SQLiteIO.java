@@ -1,5 +1,6 @@
 package com.github.marvin_c_offiah.data_utils;
 
+import static com.github.marvin_c_offiah.data_utils.SQLStringUtils.toListString;
 import static com.github.marvin_c_offiah.data_utils.SQLStringUtils.toWildcardAssignmentsString;
 import static com.github.marvin_c_offiah.data_utils.SQLStringUtils.toWildcardListStrings;
 
@@ -46,8 +47,8 @@ public class SQLiteIO extends Observable {
 	return key.toArray(new String[0]);
     }
 
-    public TreeMap<String, TreeMap<String, String>> getImportedKeys(String table) throws Exception {
-	ResultSet rs = connection.getMetaData().getImportedKeys(null, null, table);
+    public TreeMap<String, TreeMap<String, String>> getImportedKeys(String tableName) throws Exception {
+	ResultSet rs = connection.getMetaData().getImportedKeys(null, null, tableName);
 	TreeMap<String, TreeMap<String, String>> keys = new TreeMap<String, TreeMap<String, String>>();
 	while (rs.next()) {
 	    String pkTblName = rs.getString("PKTABLE_NAME");
@@ -69,43 +70,46 @@ public class SQLiteIO extends Observable {
 	return tables;
     }
 
-    public TreeMap<String, Object[]> selectColumns(String tableName,
-			String[] names, boolean includeRowId) throws Exception {
-		String colNames = (includeRowId ? "_rowid_ as _rowid_, " : "")
-				+ (names == null || names.length == 0 ? "*"
-						: toWildcardListString(values)(names));
-		
-		
-		JDBC4PreparedStatement statement = new JDBC4PreparedStatement(
-			connection,
-			"SELECT " + toWildcardListString(names) + " FROM ?");
-		
-		
-		
-		ResultSet rs = connection.createStatement()
-				.executeQuery("SELECT " + colNames + " FROM " + tableName);
-		TreeMap<String, Object[]> selection = new TreeMap<String, Object[]>();
-		if (names == null) {
-			int colCount = rs.getMetaData().getColumnCount();
-			names = new String[colCount];
-			for (int i = 0; i < colCount; i++) {
-				names[i] = rs.getMetaData().getColumnName(i + 1);
-			}
-		}
-		TreeMap<String, ArrayList<Object>> colVals = new TreeMap<String, ArrayList<Object>>();
-		while (rs.next()) {
-			for (String name : names) {
-				if (colVals.get(name) == null)
-					colVals.put(name, new ArrayList<Object>());
-				colVals.get(name).add(rs.getObject(name));
-			}
-		}
-		for (String name : names)
-			selection.put(name, colVals.get(name).toArray());
-		return selection;
+    public TreeMap<String, Object[]> selectColumns(String tableName, String[] names, boolean includeRowId)
+	    throws Exception {
+
+	checkTableName(tableName);
+	checkColumnNames(tableName, names);
+
+	TreeMap<String, Object[]> selection = new TreeMap<String, Object[]>();
+
+	String namesList = toListString(names);
+	String colsList = (includeRowId ? "_rowid_ as _rowid_, " : "") + (namesList.equals("") ? "*" : namesList);
+	if (colsList.equals("")) {
+	    return selection;
 	}
 
+	ResultSet rs = connection.createStatement().executeQuery("SELECT " + colsList + " FROM " + tableName);
+	int colCount = rs.getMetaData().getColumnCount();
+	names = new String[colCount];
+	for (int i = 0; i < colCount; i++) {
+	    names[i] = rs.getMetaData().getColumnName(i + 1);
+	}
+	TreeMap<String, ArrayList<Object>> colVals = new TreeMap<String, ArrayList<Object>>();
+	while (rs.next()) {
+	    for (String name : names) {
+		if (colVals.get(name) == null)
+		    colVals.put(name, new ArrayList<Object>());
+		colVals.get(name).add(rs.getObject(name));
+	    }
+	}
+	for (String name : names)
+	    selection.put(name, colVals.get(name).toArray());
+	return selection;
+
+    }
+
     public void insertIntoTable(String name, TreeMap<String, Object> values) throws Exception {
+
+	checkTableName(name);
+	if (values != null) {
+	    checkColumnNames(name, values.keySet().toArray(new String[values.size()]));
+	}
 
 	Object[] valsStrings = null;
 	TreeMap<String, Object> wildcards = null;
@@ -119,8 +123,9 @@ public class SQLiteIO extends Observable {
 	    wildcardStrgs = toListStrings(wildcards);
 	}
 
-	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection, "INSERT INTO ?" + (valsStrings == null
-		? " DEFAULT VALUES" : ("(" + wildcardStrgs[0] + ") VALUES(" + wildcardStrgs[1] + ")")));
+	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
+		"INSERT INTO ?" + (valsStrings == null ? " DEFAULT VALUES"
+			: ("(" + wildcardStrgs[0] + ") VALUES(" + wildcardStrgs[1] + ")")));
 
 	if (valsStrings != null) {
 
@@ -185,6 +190,37 @@ public class SQLiteIO extends Observable {
     public void deleteFromTable(String name, TreeMap<String, Object> primaryKey) throws Exception {
 	connection.createStatement().executeQuery("DELETE FROM " + name + " WHERE " + toAssignmentsString(primaryKey));
 	setChanged();
+    }
+
+    protected void checkTableName(String name) throws Exception {
+	ResultSet allTables = connection.getMetaData().getTables(null, null, null, new String[] { "TABLE" });
+	boolean tblFound = false;
+	while (allTables.next()) {
+	    if (allTables.getString("TABLE_NAME").equals(name)) {
+		tblFound = true;
+		break;
+	    }
+	}
+	if (!tblFound) {
+	    throw new IllegalArgumentException("Table \"" + name + "\" does not exist.");
+	}
+    }
+
+    protected void checkColumnNames(String tableName, String[] names) throws Exception {
+	String namesList = toListString(names);
+	ArrayList<String> allColumns = new ArrayList<String>();
+	if (!namesList.equals("")) {
+	    ResultSet allCols = connection.getMetaData().getColumns(null, null, tableName, null);
+	    while (allCols.next()) {
+		allColumns.add(allCols.getString("COLUMN_NAME"));
+	    }
+	    for (String name : names) {
+		if (name != null && !allColumns.contains(name)) {
+		    throw new IllegalArgumentException(
+			    "Column \"" + name + "\" does not exist in table \"" + tableName + "\".");
+		}
+	    }
+	}
     }
 
 }

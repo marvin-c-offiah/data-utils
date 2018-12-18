@@ -13,10 +13,33 @@ public class SQLStringUtils {
 	String str = "";
 	if (values != null) {
 	    for (int i = 0; i < values.length - 1; i++) {
-		str += "?,";
+		if (values[i] != null) {
+		    str += "?,";
+		}
+	    }
+	    if (values[values.length - 1] != null) {
+		str += "?";
+	    } else {
+		str = str.length() == 0 ? "" : str.substring(0, str.length() - 1);
 	    }
 	}
-	str += "?";
+	return str;
+    }
+
+    public static String toListString(Object[] values) {
+	String str = "";
+	if (values != null) {
+	    for (int i = 0; i < values.length - 1; i++) {
+		if (values[i] != null) {
+		    str += values[i] + ",";
+		}
+	    }
+	    if (values[values.length - 1] != null) {
+		str += values[values.length - 1] + "?";
+	    } else {
+		str = str.length() == 0 ? "" : str.substring(0, str.length() - 1);
+	    }
+	}
 	return str;
     }
 
