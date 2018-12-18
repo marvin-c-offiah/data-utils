@@ -22,3 +22,5 @@ Data Utils provides a set of data handling utilities.
     * `michaelJackson.put("year_of_birth", 1958);`
     * `database.insertIntoTable("artists", michaelJackson);`
   * Similar interfaces for update, delete etc.
+
+* Wrappers provide safety from SQL-injection by checking validity of table/column names and using SQL Prepared Statements.
