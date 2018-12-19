@@ -47,7 +47,7 @@ public class SQLStringUtils {
 		}
 	    }
 	    if (keys[keys.length - 1] != null) {
-		str += keys[keys.length - 1] + "?";
+		str += keys[keys.length - 1];
 	    } else {
 		str = str.length() == 0 ? "" : str.substring(0, str.length() - 1);
 	    }
@@ -76,7 +76,7 @@ public class SQLStringUtils {
 	    delim = ",";
 	}
 	String[] keysArray = values.keySet().toArray(new String[values.size()]);
-	for (int i = 0; i <= keysArray.length; i++) {
+	for (int i = 0; i < keysArray.length - 1; i++) {
 	    if (keysArray[i] != null) {
 		result += keysArray[i] + " = ? " + delim;
 	    }
@@ -84,7 +84,7 @@ public class SQLStringUtils {
 	if (keysArray[keysArray.length - 1] != null) {
 	    result += keysArray[keysArray.length - 1] + " = ? ";
 	} else {
-	    result = result.substring(0, result.lastIndexOf(result));
+	    result = result.substring(0, result.lastIndexOf(delim));
 	}
 	return result;
     }

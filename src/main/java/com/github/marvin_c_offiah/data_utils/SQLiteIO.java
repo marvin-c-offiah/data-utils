@@ -15,7 +15,6 @@ import java.util.Observable;
 import java.util.TreeMap;
 
 import org.sqlite.SQLiteConnection;
-import org.sqlite.core.Codes;
 import org.sqlite.jdbc4.JDBC4PreparedStatement;
 
 import com.github.marvin_c_offiah.data_utils.SQLStringUtils.AssignmentDelimiter;
@@ -121,7 +120,7 @@ public class SQLiteIO extends Observable {
 	for (String key : values.keySet()) {
 	    pairs.add(new SimpleEntry<String, Object>(key, values.get(key)));
 	}
-	executePreparedStatement(statement, pairs);
+	executePreparedStatement(statement, name, pairs);
     }
 
     public void updateInTable(String name, TreeMap<String, Object> primaryKey, TreeMap<String, Object> line)
@@ -146,7 +145,7 @@ public class SQLiteIO extends Observable {
 	for (String key : primaryKey.keySet()) {
 	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
 	}
-	executePreparedStatement(statement, pairs);
+	executePreparedStatement(statement, name, pairs);
     }
 
     public void deleteFromTable(String name, TreeMap<String, Object> primaryKey) throws Exception {
@@ -161,7 +160,7 @@ public class SQLiteIO extends Observable {
 	for (String key : primaryKey.keySet()) {
 	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
 	}
-	executePreparedStatement(statement, pairs);
+	executePreparedStatement(statement, name, pairs);
     }
 
     protected void checkTableName(String name) throws Exception {
@@ -186,6 +185,7 @@ public class SQLiteIO extends Observable {
 	    while (allCols.next()) {
 		allColumns.add(allCols.getString("COLUMN_NAME"));
 	    }
+	    allColumns.add("_rowid_");
 	    for (String name : names) {
 		if (name != null && !allColumns.contains(name)) {
 		    throw new IllegalArgumentException(
@@ -195,7 +195,7 @@ public class SQLiteIO extends Observable {
 	}
     }
 
-    protected void executePreparedStatement(JDBC4PreparedStatement statement,
+    protected void executePreparedStatement(JDBC4PreparedStatement statement, String tableName,
 	    ArrayList<SimpleEntry<String, Object>> values) throws Exception {
 	String[] columnNames = new String[values.size()];
 	for (int i = 0; i < values.size(); i++) {
@@ -204,26 +204,35 @@ public class SQLiteIO extends Observable {
 	String columnsList = toListString(columnNames);
 	if (!columnsList.equals("")) {
 	    ResultSetMetaData metadata = connection.createStatement()
-		    .executeQuery("SELECT " + columnsList + " FROM ? WHERE 1 = 0").getMetaData();
-	    TreeMap<String, Integer> columnTypes = new TreeMap<String, Integer>();
+		    .executeQuery("SELECT " + columnsList + " FROM " + tableName + " WHERE 1 = 0").getMetaData();
+	    TreeMap<String, String> columnTypes = new TreeMap<String, String>();
 	    for (int i = 1; i <= metadata.getColumnCount(); i++) {
-		columnTypes.put(metadata.getColumnName(i), metadata.getColumnType(i));
+		columnTypes.put(metadata.getColumnName(i), metadata.getColumnTypeName(i));
 	    }
 	    for (int i = 1; i <= metadata.getColumnCount(); i++) {
-		Object value = values.get(i);
-		switch (columnTypes.get(metadata.getColumnName(i))) {
-		case Codes.SQLITE_INTEGER:
-		    statement.setInt(i, (Integer) value);
-		    break;
-		case Codes.SQLITE_FLOAT:
-		    statement.setFloat(i, (Float) value);
-		    break;
-		case Codes.SQLITE_TEXT:
-		    statement.setString(i, (String) value);
-		    break;
-		case Codes.SQLITE_BLOB:
-		    statement.setBlob(i, (Blob) value);
+		Object value = values.get(i - 1).getValue();
+		String colType = columnTypes.get(metadata.getColumnName(i));
+		if (colType.contains("INT")) {
+		    statement.setInt(i, Integer.parseInt("" + value));
+		    continue;
 		}
+		if (colType.contains("BOOLEAN ")) {
+		    statement.setBoolean(i, Boolean.parseBoolean("" + value));
+		    continue;
+		}
+		if (colType.contains("REAL") || colType.contains("DOUBLE") || colType.contains("FLOAT")) {
+		    statement.setDouble(i, Double.parseDouble("" + value));
+		    continue;
+		}
+		if (colType.contains("TEXT") || colType.contains("CHAR") || colType.contains("CLOB")) {
+		    statement.setString(i, "" + value);
+		    continue;
+		}
+		if (colType.contains("BLOB") || colType.equals("")) {
+		    statement.setBlob(i, (Blob) value);
+		    continue;
+		}
+		statement.setString(i, "" + value);
 	    }
 	}
 	statement.execute();
