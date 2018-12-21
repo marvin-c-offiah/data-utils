@@ -62,48 +62,48 @@ public class SQLiteIO extends Observable {
 	return keys;
     }
 
-    public TreeMap<String, TreeMap<String, Object[]>> getTables() throws Exception {
+    public TreeMap<String, ArrayList<TreeMap<String, Object>>> getTables() throws Exception {
 	ResultSet rs = connection.getMetaData().getTables(null, null, null, new String[] { "TABLE" });
-	TreeMap<String, TreeMap<String, Object[]>> tables = new TreeMap<String, TreeMap<String, Object[]>>();
+	TreeMap<String, ArrayList<TreeMap<String, Object>>> tables = new TreeMap<String, ArrayList<TreeMap<String, Object>>>();
 	while (rs.next()) {
 	    String name = rs.getString("TABLE_NAME");
-	    tables.put(name, selectColumns(name, null, true));
+	    tables.put(name, selectColumns(name, null, null, true));
 	}
 	return tables;
     }
 
-    public TreeMap<String, Object[]> selectColumns(String tableName, String[] names, boolean includeRowId)
-	    throws Exception {
-
+    public ArrayList<TreeMap<String, Object>> selectColumns(String tableName, TreeMap<String, Object> primaryKey,
+	    String[] names, boolean includeRowId) throws Exception {
 	checkTableName(tableName);
+	if (primaryKey != null) {
+	    checkColumnNames(tableName, primaryKey.keySet().toArray(new String[primaryKey.size()]));
+	}
 	checkColumnNames(tableName, names);
-
-	TreeMap<String, Object[]> selection = new TreeMap<String, Object[]>();
-
+	String pkString = toWildcardAssignmentsString(primaryKey, AssignmentDelimiter.AND);
 	String namesList = toListString(names);
 	String colsList = (includeRowId ? "_rowid_ as _rowid_, " : "") + (namesList.equals("") ? "*" : namesList);
-	if (colsList.equals("")) {
-	    return selection;
+	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
+		"SELECT " + colsList + " FROM " + tableName + (pkString.equals("") ? "" : (" WHERE " + pkString)));
+	ArrayList<SimpleEntry<String, Object>> pairs = new ArrayList<SimpleEntry<String, Object>>();
+	for (String key : primaryKey.keySet()) {
+	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
 	}
-
-	ResultSet rs = connection.createStatement().executeQuery("SELECT " + colsList + " FROM " + tableName);
+	executePreparedStatement(statement, tableName, pairs, false);
+	ResultSet rs = statement.getResultSet();
 	int colCount = rs.getMetaData().getColumnCount();
 	names = new String[colCount];
 	for (int i = 0; i < colCount; i++) {
 	    names[i] = rs.getMetaData().getColumnName(i + 1);
 	}
-	TreeMap<String, ArrayList<Object>> colVals = new TreeMap<String, ArrayList<Object>>();
+	ArrayList<TreeMap<String, Object>> selection = new ArrayList<TreeMap<String, Object>>();
 	while (rs.next()) {
+	    TreeMap<String, Object> row = new TreeMap<String, Object>();
 	    for (String name : names) {
-		if (colVals.get(name) == null)
-		    colVals.put(name, new ArrayList<Object>());
-		colVals.get(name).add(rs.getObject(name));
+		row.put(name, rs.getObject(name));
 	    }
+	    selection.add(row);
 	}
-	for (String name : names)
-	    selection.put(name, colVals.get(name).toArray());
 	return selection;
-
     }
 
     public void insertIntoTable(String name, TreeMap<String, Object> values) throws Exception {
@@ -121,6 +121,7 @@ public class SQLiteIO extends Observable {
 	    pairs.add(new SimpleEntry<String, Object>(key, values.get(key)));
 	}
 	executePreparedStatement(statement, name, pairs);
+	setChanged();
     }
 
     public void updateInTable(String name, TreeMap<String, Object> primaryKey, TreeMap<String, Object> line)
@@ -146,6 +147,7 @@ public class SQLiteIO extends Observable {
 	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
 	}
 	executePreparedStatement(statement, name, pairs);
+	setChanged();
     }
 
     public void deleteFromTable(String name, TreeMap<String, Object> primaryKey) throws Exception {
@@ -161,6 +163,7 @@ public class SQLiteIO extends Observable {
 	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
 	}
 	executePreparedStatement(statement, name, pairs);
+	setChanged();
     }
 
     protected void checkTableName(String name) throws Exception {
@@ -197,6 +200,11 @@ public class SQLiteIO extends Observable {
 
     protected void executePreparedStatement(JDBC4PreparedStatement statement, String tableName,
 	    ArrayList<SimpleEntry<String, Object>> values) throws Exception {
+	executePreparedStatement(statement, tableName, values, true);
+    }
+
+    protected void executePreparedStatement(JDBC4PreparedStatement statement, String tableName,
+	    ArrayList<SimpleEntry<String, Object>> values, boolean closeAfterExecution) throws Exception {
 	String[] columnNames = new String[values.size()];
 	for (int i = 0; i < values.size(); i++) {
 	    columnNames[i] = values.get(i).getKey();
@@ -236,8 +244,9 @@ public class SQLiteIO extends Observable {
 	    }
 	}
 	statement.execute();
-	statement.close();
-	setChanged();
+	if (closeAfterExecution) {
+	    statement.close();
+	}
     }
 
 }
