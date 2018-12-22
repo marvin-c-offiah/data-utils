@@ -23,7 +23,7 @@ public class SQLStringUtils {
 
     public static String toWildcardListString(Object[] values) {
 	String str = "";
-	if (values != null) {
+	if (values != null && values.length > 0) {
 	    for (int i = 0; i < values.length - 1; i++) {
 		if (values[i] != null) {
 		    str += "?,";
@@ -40,7 +40,7 @@ public class SQLStringUtils {
 
     public static String toListString(Object[] keys) {
 	String str = "";
-	if (keys != null) {
+	if (keys != null && keys.length > 0) {
 	    for (int i = 0; i < keys.length - 1; i++) {
 		if (keys[i] != null) {
 		    str += keys[i] + ",";
