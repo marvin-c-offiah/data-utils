@@ -85,8 +85,10 @@ public class SQLiteIO extends Observable {
 	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
 		"SELECT " + colsList + " FROM " + tableName + (pkString.equals("") ? "" : (" WHERE " + pkString)));
 	ArrayList<SimpleEntry<String, Object>> pairs = new ArrayList<SimpleEntry<String, Object>>();
-	for (String key : primaryKey.keySet()) {
-	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	if (!pkString.equals("")) {
+	    for (String key : primaryKey.keySet()) {
+		pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	    }
 	}
 	executePreparedStatement(statement, tableName, pairs, false);
 	ResultSet rs = statement.getResultSet();
@@ -143,8 +145,10 @@ public class SQLiteIO extends Observable {
 	for (String key : line.keySet()) {
 	    pairs.add(new SimpleEntry<String, Object>(key, line.get(key)));
 	}
-	for (String key : primaryKey.keySet()) {
-	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	if (!pkString.equals("")) {
+	    for (String key : primaryKey.keySet()) {
+		pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	    }
 	}
 	executePreparedStatement(statement, name, pairs);
 	setChanged();
@@ -159,8 +163,10 @@ public class SQLiteIO extends Observable {
 	JDBC4PreparedStatement statement = new JDBC4PreparedStatement(connection,
 		"DELETE FROM" + name + (pkString.equals("") ? "" : (" WHERE " + pkString)));
 	ArrayList<SimpleEntry<String, Object>> pairs = new ArrayList<SimpleEntry<String, Object>>();
-	for (String key : primaryKey.keySet()) {
-	    pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	if (!pkString.equals("")) {
+	    for (String key : primaryKey.keySet()) {
+		pairs.add(new SimpleEntry<String, Object>(key, primaryKey.get(key)));
+	    }
 	}
 	executePreparedStatement(statement, name, pairs);
 	setChanged();
